@@ -1,33 +1,37 @@
 # Observabilidad y Operación
 
-Este documento describe las métricas, logging estructurado, límites (rate limiting / payload), y cómo extender la observabilidad del servicio de clasificación.
+Este documento describe las métricas (Prometheus), logging estructurado, límites (rate limiting local o distribuido), exposición opcional de documentación, firma de imágenes y cómo extender la observabilidad del servicio de clasificación.
 
 ## Resumen
 
 El servicio expone:
 - Endpoint `/metrics` (si `ENABLE_METRICS=1`) en formato Prometheus.
 - Logging JSON por request con latencia y código de estado.
-- Rate limiting tipo token bucket configurable.
+- Rate limiting tipo token bucket configurable en memoria o distribuido vía Redis (`REDIS_URL`).
 - Validación de longitud máxima de query / payload.
-- Métricas base: latencia (histogram) y conteo de requests.
-
-Este documento también cubre métricas que vamos a añadir (score máximo, abstenciones por idioma) y endpoints enriquecidos (`/health`).
+- Métricas de negocio y técnicas (latencia, requests, score de clasificación, abstenciones, 429, 5xx).
+- Toggle para exponer/ocultar documentación OpenAPI (`FASTAPI_ENABLE_DOCS`).
+- Endpoint de salud enriquecido `/health`.
+- Imagen Docker firmada (workflow de release) con SBOM adjunta.
 
 ## Variables de Configuración (settings)
 
 | Variable | Descripción | Ejemplo |
 |----------|-------------|---------|
 | `ENABLE_METRICS` | Activa exportación Prometheus | `1` |
-| `REQUEST_RATE_LIMIT` | Tokens por ventana para IP | `60` |
+| `REQUEST_RATE_LIMIT` | Tokens por ventana para IP | `100` |
 | `RATE_LIMIT_WINDOW_S` | Longitud ventana (s) | `60` |
-| `MAX_QUERY_CHARS` | Longitud máxima de texto a clasificar | `512` |
+| `MAX_QUERY_CHARS` | Longitud máxima de texto a clasificar (aprox *4 bytes) | `512` |
 | `EMBEDDINGS_BACKEND` | `placeholder` o `st` | `placeholder` |
 | `EMBEDDINGS_MODEL` | Nombre modelo ST | `sentence-transformers/all-MiniLM-L6-v2` |
+| `FASTAPI_ENABLE_DOCS` | Exponer `/docs` y `/openapi.json` | `1` |
+| `REDIS_URL` | Activar rate limiting distribuido | *(vacío)* |
 
 ## Logging Estructurado
 
 Formato JSON line por request (middleware) con campos sugeridos:
-```
+
+```json
 {
   "ts": "2025-10-14T12:34:56.789Z",
   "method": "POST",
@@ -40,82 +44,81 @@ Formato JSON line por request (middleware) con campos sugeridos:
 ```
 Eventos de clasificación pueden incluir `top_class`, `score_max`, `abstained`.
 
-## Métricas Existentes
+## Métricas (nomenclatura definitiva)
+
+Prefijo unificado `twic_`.
 
 | Nombre | Tipo | Labels | Descripción |
 |--------|------|--------|-------------|
-| `app_requests_total` | Counter | `method`, `path`, `status` | Conteo de requests |
-| `app_request_latency_seconds` | Histogram | `method`, `path` | Latencia request |
-| `app_abstentions_total` | Counter | (pendiente enriq.) `lang` | Número de respuestas donde el sistema se abstuvo |
+| `twic_requests_total` | Counter | `method`, `path`, `status` | Conteo de requests HTTP |
+| `twic_request_latency_seconds` | Histogram | `method`, `path` | Latencia por request |
+| `twic_classify_score_max` | Histogram | `lang` | Distribución del score máximo devuelto |
+| `twic_abstentions_total` | Counter | `lang` | Abstenciones (clasificador se abstiene) |
+| `twic_http_429_total` | Counter | *sin labels* | Respuestas 429 (rate limit) |
+| `twic_http_5xx_total` | Counter | *sin labels* | Respuestas 5xx |
 
-## Métricas Planeadas (Quick Win)
-
-| Nombre | Tipo | Labels | Descripción |
-|--------|------|--------|-------------|
-| `app_classify_score_max` | Histogram | `lang` | Distribución del score máximo devuelto |
-| `app_abstentions_total` | Counter | `lang` | Abstenciones segmentadas por idioma |
-
-Buckets recomendados para `score_max`: `[0.0,0.2,0.4,0.6,0.7,0.8,0.85,0.9,0.95,1.0]`.
+Buckets `twic_classify_score_max`: `[0.0,0.2,0.4,0.6,0.7,0.8,0.85,0.9,0.95,0.97,1.0]`.
 
 ## Cómo habilitar Prometheus
 
 1. Establecer variable de entorno: `ENABLE_METRICS=1`.
 2. Desplegar el servicio.
 3. Configurar Prometheus scrape job:
-```
+
+```yaml
 - job_name: twic
   scrape_interval: 15s
   static_configs:
     - targets: ['twic:8000']
 ```
-4. Asegurar que `/metrics` no está detrás de auth (actualmente abierto). Si se requiere restricción, introducir middleware o reverse proxy.
+
+1. Asegurar que `/metrics` no está detrás de auth (actualmente abierto). Si se requiere restricción, introducir middleware o reverse proxy.
 
 ## Rate Limiting
 
-Implementación token bucket en memoria por IP:
-- Clave: dirección IP (X-Forwarded-For si existe, luego peer).
-- Cada ventana de `RATE_LIMIT_WINDOW_S` se reinicia el conteo.
-- Responde 429 cuando excedido.
-Limitaciones: No distribuido (para múltiples réplicas usar Redis o un gateway).
+Dos modos:
+
+1. Local (in-memory): token bucket reseteado cada ventana (`RATE_LIMIT_WINDOW_S`). Adecuado para desarrollo o instancia única.
+2. Distribuido (Redis): definir `REDIS_URL` (e.g. `redis://redis:6379/0`). Se hashéa la IP para la clave y se usa una key por ventana (`rl:<sha1>:<ts_bucket>`).
+
+Notas:
+- Fallback automático a modo local si no se puede conectar a Redis en arranque.
+- Métrica de saturación indirecta: observar ratio de respuestas 429 sobre total.
+- Para proteger detrás de un proxy, garantizar forward de cabeceras IP y (idealmente) introducir un WAF / API Gateway externo para reglas más complejas.
 
 ## Validaciones de Payload / Query
 
 - Límite `MAX_QUERY_CHARS` para evitar queries patológicamente grandes.
 - Posible extensión: rechazo de entradas vacías o sólo stopwords (pendiente si se considera necesario).
 
-## Endpoint /health (estado futuro enriquecido)
+## Endpoint /health
 
-Se añadirá información JSON:
-```
-{
-  "status": "ok",
-  "model_version": "0.1.0",
-  "classes": 123,
-  "embeddings_dim": 384,
-  "last_retraining_ts": "2025-10-10T09:00:00Z",
-  "artifacts_present": ["models/tfidf.joblib", "models/lr.joblib"],
-  "uptime_s": 123456
-}
-```
-Uso: readiness/liveness en orquestador.
+Devuelve información ligera sobre artefactos presentes, número de clases y dimensión de embeddings detectada. Se puede extender para incluir versión de modelo o timestamp de retraining (añadir a `models/metadata.json`). Útil para readiness/liveness.
 
 ## Feedback Loop
 
 Los archivos JSONL diarios en `data/feedback/YYYY-MM-DD.jsonl` se consolidarán con un script (`scripts/feedback_consolidate.py`) para generar un dataset acumulado y estadísticas:
 - Total ejemplos.
 - % por idioma.
-- % abstenciones corregidas (si se registra). 
+- % abstenciones corregidas (si se registra).
 
 ## Active Learning
 
 Script (`scripts/select_uncertain.py`) calculará entropía o margen (diferencia entre top1 y top2) para priorizar qué ejemplos mandar a etiquetado humano.
 
+## Firma de Imágenes & Supply Chain
+
+El workflow de release firma la imagen Docker con **cosign (keyless)** y genera un SBOM SPDX (syft). Recomendaciones:
+- Verificar firma en pipeline de deploy (`cosign verify`).
+- Configurar política de admisión (Kubernetes) que sólo permita imágenes firmadas.
+- Archivar SBOMs para escaneo de vulnerabilidades (Grype, Trivy).
+
 ## Extensiones Futuras
 
-- Tracing (OpenTelemetry) para spans de subcomponentes: embeddings, bm25, classifier.
-- KL / JS divergence de distribución de clases vs baseline para drift.
-- Canary/shadow model para comparar distribución de scores.
-- Export a Grafana dashboard JSON versionado.
+- Tracing (OpenTelemetry) para spans de embeddings / BM25 / classifier.
+- Detección de drift: KL/JS divergence sobre distribución de clases y buckets de score.
+- Canary/shadow model para comparar score distributions antes de promover.
+- Integración de alertas (Prometheus Alertmanager) para p95, abstention rate y ratio 5xx.
 
 ## Buenas Prácticas Operativas
 
@@ -138,4 +141,4 @@ Script (`scripts/select_uncertain.py`) calculará entropía o margen (diferencia
 5. Sin crecimiento anómalo de tamaño de logs.
 
 ---
-Última actualización: 2025-10-14.
+Última actualización: 2025-10-14 (redis + firma + métricas HTTP).

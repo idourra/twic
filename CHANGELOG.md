@@ -68,6 +68,13 @@ The format roughly follows Keep a Changelog, with semantic version intent (pre-1
 
 ## Unreleased
 
-- Integrar distribución completa de probabilidades del clasificador para mejorar estrategias de incertidumbre.
-- Alerting (p95 latencia, tasa abstención) y dashboards preconfigurados.
-- Canary/shadow deployment del próximo modelo calibrado.
+- Redis rate limiting distribuido (fallback automático a local).
+- Toggle de documentación pública (`FASTAPI_ENABLE_DOCS`).
+- Métricas HTTP adicionales: `twic_http_429_total`, `twic_http_5xx_total`.
+- Workflows CI/CD: `release.yml` (firma cosign + SBOM) y `deploy.yml` (verificación + smoke test + métricas).
+- Dashboard Grafana versionado (`docs/grafana/dashboard_twic.json`).
+- Firma de imagen Docker (cosign keyless) y generación de SBOM SPDX.
+- Actualización de documentación de observabilidad y README con nuevas capacidades.
+- Integrar distribución completa de probabilidades del clasificador para mejorar estrategias de incertidumbre. (plan)
+- Alerting (p95 latencia, tasa abstención) y dashboards preconfigurados adicionales. (plan)
+- Canary/shadow deployment del próximo modelo calibrado. (plan)

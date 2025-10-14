@@ -1,6 +1,6 @@
 # twic
 
-MVP de clasificación de intenciones de búsqueda (FastAPI + recuperación híbrida + clasificación).
+Servicio de clasificación de intenciones de búsqueda (FastAPI + recuperación híbrida + clasificación) con observabilidad, rate limiting distribuido opcional y cadena de suministro firmada.
 
 ## Flujo de Trabajo (GitHub Flow)
 
@@ -23,23 +23,33 @@ models/         # Modelos ML serializados
 scripts/        # Utilidades (importar SKOS, entrenar, embeddings)
 ```
 
-## Próximos pasos
+## Roadmap (extracto histórico)
 
-- Añadir workflow CI (pytest + ruff + mypy).
-- Integrar importación real de SKOS en pipeline.
-- Añadir CHANGELOG y versionado semántico automatizado.
-- (Hecho) Fusión híbrida.
-- Integrar embeddings reales sentence-transformers.
+- MVP inicial (fusión híbrida y endpoints básicos)
+- Métricas y logging estructurado
+- Calibración opcional y métricas offline
+- Feedback loop + active learning (scripts)
+- Release 0.2.0 (tag y CHANGELOG)
+- Hardening Docker + compose prod + smoke test
+- Rate limiting distribuido (Redis) + toggle docs (`FASTAPI_ENABLE_DOCS`)
+- Workflows: release (build + firma cosign + SBOM) y deploy con smoke test
+
+Próximos candidatos:
+
+- Tracing (OpenTelemetry)
+- Detección de drift y alertas Prometheus
 
 ## Operación & Observabilidad
 
-El servicio incluye:
+Incluye:
 
 - Middleware de logging JSON (latencia, código, ruta).
-- Rate limiting configurable (token bucket) y validación de longitud de query.
+- Rate limiting local en memoria o distribuido via Redis (`REDIS_URL`).
+- Toggle de documentación: `FASTAPI_ENABLE_DOCS=0` para ocultar `/docs` y `/openapi.json` en producción.
 - Endpoint `/metrics` (Prometheus) activable vía `ENABLE_METRICS=1`.
-- Métricas base: histogram de latencia y contador de requests.
-- Métricas planificadas inmediatas: distribución de `score_max` y abstenciones por idioma.
+- Métricas: `twic_requests_total`, `twic_request_latency_seconds`, `twic_classify_score_max`, `twic_abstentions_total`, `twic_http_429_total`, `twic_http_5xx_total`.
+- Dashboard Grafana JSON en `docs/grafana/dashboard_twic.json`.
+- Imagen Docker firmada (cosign keyless) + SBOM (workflow release).
 
 Referencias detalladas y buenas prácticas en `docs/observability.md`.
 
@@ -57,7 +67,7 @@ Scrape config Prometheus mínima:
     - targets: ['localhost:8000']
 ```
 
-SLO sugerido inicial: p95 latencia < 150 ms, tasa de abstención < 10%.
+SLO sugerido inicial: p95 latencia < 150 ms, tasa de abstención < 10%, 429 rate bajo (<2% de requests), 5xx < 0.5%.
 
 ## Docker
 
@@ -98,10 +108,13 @@ uvicorn app.main:app --reload --port 8000
 | DEFAULT_LANG | Idioma por defecto | es |
 | EMBEDDINGS_BACKEND | placeholder o st (sentence-transformers) | placeholder |
 | EMBEDDINGS_MODEL | Nombre del modelo ST | sentence-transformers/all-MiniLM-L6-v2 |
+| FASTAPI_ENABLE_DOCS | Exponer docs/openapi | 1 |
+| REDIS_URL | Activar rate limiting distribuido | (vacío) |
+| ENABLE_METRICS | Exponer /metrics | 1 |
 
 ### Health y OpenAPI
 
-Una vez levantado: <http://localhost:8000/docs> (deshabilitar en prod si se requiere).
+Una vez levantado: <http://localhost:8000/docs> (controlado por `FASTAPI_ENABLE_DOCS`).
 
 ## Retraining del Clasificador
 
@@ -180,6 +193,21 @@ uvicorn app.main:app --reload
 ```
 
 Fallback automático: si falla la importación o carga del modelo, el sistema imprime un aviso y vuelve a `placeholder` sin romper el flujo.
+
+## Release & Deploy
+
+Workflows en `.github/workflows/`:
+
+- `release.yml`: Ejecuta lint + tests, construye imagen, la sube a GHCR, firma con cosign (keyless) y genera SBOM SPDX.
+- `deploy.yml`: Verifica firma, arranca contenedor, ejecuta `scripts/smoke.py` y valida `/metrics`.
+
+Para lanzar un release: crear tag `vX.Y.Z` (p.ej. `git tag v0.2.1 && git push origin v0.2.1`).
+
+Verificación local de firma (suponiendo cosign instalado):
+
+```bash
+cosign verify ghcr.io/<owner>/<repo>:0.2.0
+```
 
 
 ## Contribuir

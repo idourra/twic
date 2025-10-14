@@ -6,6 +6,7 @@ import time
 import json
 import os
 import joblib
+import hashlib
 from app.core.settings import settings
 from app.routers import taxonomy, feedback, classify, admin
 from app import observability
@@ -21,14 +22,14 @@ REQUEST_LATENCY = observability.REQUEST_LATENCY
 REQUEST_COUNT = observability.REQUEST_COUNT
 
 
-class RateLimiter:
+class LocalRateLimiter:
     def __init__(self, capacity: int, window_s: int):
         self.capacity = capacity
         self.window_s = window_s
         self.tokens = capacity
         self.refill_ts = time.time()
 
-    def allow(self) -> bool:
+    def allow(self, key: str) -> bool:  # key ignored locally
         now = time.time()
         if now - self.refill_ts >= self.window_s:
             self.tokens = self.capacity
@@ -39,7 +40,45 @@ class RateLimiter:
         return False
 
 
-_rate_limiter = RateLimiter(settings.request_rate_limit, settings.rate_limit_window_s)
+class RedisRateLimiter:
+    def __init__(self, url: str, capacity: int, window_s: int):
+        import redis  # type: ignore  # optional dependency
+
+        self.r = redis.Redis.from_url(url, decode_responses=True)
+        self.capacity = capacity
+        self.window_s = window_s
+
+    def allow(self, key: str) -> bool:
+        key_hash = hashlib.sha1(key.encode()).hexdigest()
+        bucket = f"rl:{key_hash}:{int(time.time() // self.window_s)}"
+        with self.r.pipeline() as pipe:  # type: ignore
+            while True:  # optimistic lock
+                try:
+                    pipe.watch(bucket)
+                    current = pipe.get(bucket)
+                    current_i = int(current) if current else 0
+                    if current_i >= self.capacity:
+                        pipe.unwatch()
+                        return False
+                    pipe.multi()
+                    pipe.incr(bucket, 1)
+                    pipe.expire(bucket, self.window_s + 1)
+                    pipe.execute()
+                    return True
+                except Exception:  # pragma: no cover
+                    time.sleep(0.005)
+                    continue
+
+
+if settings.redis_url:
+    try:  # pragma: no cover (network)
+        _rate_limiter: object | None = RedisRateLimiter(
+            settings.redis_url, settings.request_rate_limit, settings.rate_limit_window_s
+        )
+    except Exception:  # fallback to local
+        _rate_limiter = LocalRateLimiter(settings.request_rate_limit, settings.rate_limit_window_s)
+else:
+    _rate_limiter = LocalRateLimiter(settings.request_rate_limit, settings.rate_limit_window_s)
 
 
 class ObservabilityMiddleware(BaseHTTPMiddleware):  # pragma: no cover (integration)
@@ -50,7 +89,9 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):  # pragma: no cover (integrat
             body_bytes = await request.body()
             if len(body_bytes) > settings.max_query_chars * 4:  # approximate safety margin
                 return PlainTextResponse("payload too large", status_code=413)
-        if not _rate_limiter.allow():
+        # Identify client (basic): IP or fallback to 'global'
+        client_ip = request.client.host if request.client else "global"
+        if not _rate_limiter.allow(client_ip):  # type: ignore[arg-type]
             if observability.HTTP_429_COUNT:
                 observability.HTTP_429_COUNT.inc()
             return PlainTextResponse("rate limit exceeded", status_code=429)
@@ -78,10 +119,16 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):  # pragma: no cover (integrat
             })
             print(log_line)
 
+docs_url = "/docs" if settings.enable_docs else None
+redoc_url = "/redoc" if settings.enable_docs else None
+openapi_url = "/openapi.json" if settings.enable_docs else None
 app = FastAPI(
     title=settings.api_name,
     version=settings.api_version,
     default_response_class=ORJSONResponse,
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
 )
 
 app.add_middleware(ObservabilityMiddleware)

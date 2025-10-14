@@ -1,0 +1,76 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (staging|prod)'
+        required: true
+        default: 'staging'
+      image-tag:
+        description: 'Image tag to deploy (e.g. 0.2.1)'
+        required: true
+      enable-docs:
+        description: 'Expose OpenAPI docs (1 or 0)'
+        required: false
+        default: '0'
+      redis-url:
+        description: 'Redis URL for distributed rate limit (optional)'
+        required: false
+
+jobs:
+  deploy-and-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for cosign verify keyless
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+    steps:
+      - name: Checkout repo (for scripts)
+        uses: actions/checkout@v4
+
+      - name: Pull image
+        run: docker pull $REGISTRY/${IMAGE_NAME}:${{ github.event.inputs.image-tag }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.5.0
+        with:
+          cosign-release: 'v2.2.3'
+
+      - name: Verify image signature
+        run: |
+          cosign verify $REGISTRY/${IMAGE_NAME}:${{ github.event.inputs.image-tag }}
+
+      - name: Run container
+        run: |
+          docker run -d --name twic_test \
+            -e ENABLE_METRICS=1 \
+            -e FASTAPI_ENABLE_DOCS=${{ github.event.inputs.enable-docs }} \
+            $( [ -n "${{ github.event.inputs.redis-url }}" ] && echo -e "-e REDIS_URL='${{ github.event.inputs.redis-url }}'" ) \
+            -p 8000:8000 $REGISTRY/${IMAGE_NAME}:${{ github.event.inputs.image-tag }}
+
+      - name: Wait for health
+        run: |
+          for i in {1..30}; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health || true)
+            if [ "$code" = "200" ]; then echo "Health OK"; break; fi
+            sleep 2
+          done
+          [ "$code" = "200" ] || { echo 'Health check failed'; docker logs twic_test; exit 1; }
+
+      - name: Smoke test script
+        run: |
+          pip install httpx orjson
+          python scripts/smoke.py --base-url http://localhost:8000
+
+      - name: Metrics endpoint check
+        run: |
+          curl -s http://localhost:8000/metrics | grep -q 'twic_requests_total' || { echo 'Metrics missing'; exit 1; }
+
+      - name: Teardown
+        if: always()
+        run: |
+          docker logs twic_test || true
+          docker rm -f twic_test || true

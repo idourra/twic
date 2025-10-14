@@ -40,4 +40,8 @@ class Settings(BaseModel):
     rate_limit_window_s: int = int(os.getenv("RATE_LIMIT_WINDOW_S", "60"))
     max_query_chars: int = int(os.getenv("MAX_QUERY_CHARS", "512"))
 
+    # Feature & infra toggles
+    enable_docs: bool = os.getenv("FASTAPI_ENABLE_DOCS", "1") == "1"
+    redis_url: str | None = os.getenv("REDIS_URL")
+
 settings = Settings()
