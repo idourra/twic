@@ -3,6 +3,8 @@
 Servicio de clasificación de intenciones de búsqueda (FastAPI + recuperación híbrida + clasificación) con observabilidad, rate limiting distribuido opcional y cadena de suministro firmada.
 
 > Guía rápida: ver `docs/quickstart.md` para instalar, ejecutar, clasificar, métricas y release.
+> Runbooks operativos: `docs/runbooks/` (latency, abstention, errors, rate_limit, low_score)
+> Herramienta batch CLI: `scripts/cli_classify.py` para clasificar archivos masivos.
 
 ## Flujo de Trabajo (GitHub Flow)
 
@@ -93,6 +95,8 @@ docker compose up --build
 
 Esto monta `./data` como volumen para poder regenerar embeddings sin reconstruir la imagen.
 
+Para desarrollo interactivo con hot reload y Redis opcional, existe `docker-compose.override.yaml` que expone el código como volumen y ejecuta `uvicorn --reload`.
+
 ### Desarrollo (hot reload)
 
 Para desarrollo puedes usar uvicorn directamente:
@@ -113,6 +117,8 @@ uvicorn app.main:app --reload --port 8000
 | FASTAPI_ENABLE_DOCS | Exponer docs/openapi | 1 |
 | REDIS_URL | Activar rate limiting distribuido | (vacío) |
 | ENABLE_METRICS | Exponer /metrics | 1 |
+| REQUEST_RATE_LIMIT | Tokens por ventana para rate limiting local/distribuido | 100 |
+| RATE_LIMIT_WINDOW_S | Ventana (s) para rate limiting | 60 |
 
 ### Health y OpenAPI
 
@@ -179,6 +185,21 @@ Artefactos generados:
 
 Detalles más extensos en `docs/retraining.md`.
 
+### Clasificación batch (offline)
+
+Para procesar un archivo grande de consultas y obtener predicciones JSONL:
+
+```bash
+python scripts/cli_classify.py --input queries.txt --output results.jsonl --url http://localhost:8000 --lang es --top-k 5 --concurrency 16 --max-rps 50
+```
+
+`queries.txt` puede ser:
+
+- Texto plano (una consulta por línea)
+- JSONL con un campo `query` (otras claves se ignoran)
+
+Salida: un JSONL con cada línea conteniendo campos originales más `prediction`, `alternatives`, `abstained`, `latency_ms`.
+
 ### Opciones avanzadas de retraining
 
 Flags clave adicionales:
@@ -236,6 +257,23 @@ Verificación local de firma (suponiendo cosign instalado):
 cosign verify ghcr.io/<owner>/<repo>:0.2.0
 ```
 
+## Reproducibilidad de dependencias
+
+Se incluye `requirements.lock` con un snapshot de versiones. Para instalar exactamente esas versiones:
+
+```bash
+pip install -r requirements.lock
+```
+
+Para regenerar (tras actualizar `pyproject.toml`):
+
+```bash
+pip install .[embeddings,dev]
+pip freeze --exclude-editable > requirements.lock
+```
+
+Alternativa futura: uso de `pip-tools` (`pip-compile`) para resolución determinista.
+
 
 ## Contribuir
 
@@ -244,5 +282,6 @@ Lee `CONTRIBUTING.md` y abre un PR.
 ## Documentación adicional
 
 - **Contrato / SOW del MVP:** ver `docs/CONTRATO_SOW.md` para objetivo, alcance, KPIs y criterios de aceptación.
-- **Changelog:** ver `CHANGELOG.md` para historial de versiones (actual 0.1.0 / SOW v1.0).
+- **Changelog:** ver `CHANGELOG.md` para historial de versiones (actual 0.2.0).
+- **Runbooks:** `docs/runbooks/*.md` para respuesta a alertas (latencia, 5xx, abstención, score bajo, 429).
 
