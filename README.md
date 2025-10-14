@@ -2,6 +2,8 @@
 
 Servicio de clasificación de intenciones de búsqueda (FastAPI + recuperación híbrida + clasificación) con observabilidad, rate limiting distribuido opcional y cadena de suministro firmada.
 
+> Guía rápida: ver `docs/quickstart.md` para instalar, ejecutar, clasificar, métricas y release.
+
 ## Flujo de Trabajo (GitHub Flow)
 
 Usamos GitHub Flow:
