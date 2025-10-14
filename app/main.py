@@ -172,6 +172,8 @@ def enriched_health():  # lightweight aggregation
         "status": "ok",
         "version": settings.api_version,
         "git_sha": settings.git_sha,
+        "build_date": settings.build_date,
+        "python_version": __import__("platform").python_version(),
         "artifacts": artifacts,
         "classes": classes_count,
         "embeddings_dim": embeddings_dim,

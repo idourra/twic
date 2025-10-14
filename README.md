@@ -116,6 +116,31 @@ uvicorn app.main:app --reload --port 8000
 
 Una vez levantado: <http://localhost:8000/docs> (controlado por `FASTAPI_ENABLE_DOCS`).
 
+### Health enriquecido
+
+`/health` devuelve ahora:
+
+```jsonc
+{
+  "status": "ok",
+  "version": "0.2.0",
+  "git_sha": "<commit>",
+  "build_date": "2025-10-14T12:34:56Z", // si se inyecta BUILD_DATE
+  "python_version": "3.11.9",
+  "artifacts": ["tfidf.joblib","lr.joblib"],
+  "classes": 123,
+  "embeddings_dim": 384
+}
+```
+
+Inyectar variables en build/run:
+
+```bash
+export GIT_SHA=$(git rev-parse HEAD)
+export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ENABLE_METRICS=1 GIT_SHA=$GIT_SHA BUILD_DATE=$BUILD_DATE uvicorn app.main:app
+```
+
 ## Retraining del Clasificador
 
 El clasificador (TF-IDF + LogisticRegression) se puede regenerar a partir de la taxonomía actual:
