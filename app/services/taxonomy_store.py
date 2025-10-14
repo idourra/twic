@@ -12,6 +12,7 @@ import numpy as np
 from app.core.settings import settings
 from app.services.embeddings import embed_text
 from . import preprocessing
+from app import observability as obs
 try:  # optional fuzzy dependency
     from rapidfuzz import fuzz  # type: ignore
 except ImportError:  # pragma: no cover
@@ -174,6 +175,12 @@ class TaxonomyStore:
                     mat = np.zeros((0, dim), dtype=np.float32)
                 self._emb_lang_mats[l] = mat
                 self._emb_lang_text_meta[l] = meta
+                # Gauge: número de embeddings precomputados por idioma
+                if obs.TAXO_EMB_CACHE_SIZE:
+                    try:
+                        obs.TAXO_EMB_CACHE_SIZE.labels(lang=l).set(mat.shape[0])
+                    except Exception:  # pragma: no cover - protección defensiva
+                        pass
         # Build autocomplete indices
         self._ac_labels.clear()
         self._ac_norms.clear()
