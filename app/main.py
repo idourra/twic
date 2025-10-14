@@ -131,6 +131,15 @@ app = FastAPI(
     openapi_url=openapi_url,
 )
 
+# Set static model/app version gauge once at import time
+if observability.MODEL_VERSION_INFO:  # pragma: no cover - simple wiring
+    try:
+        observability.MODEL_VERSION_INFO.labels(
+            settings.api_version, settings.git_sha or "unknown"
+        ).set(1)
+    except Exception:  # safety
+        pass
+
 app.add_middleware(ObservabilityMiddleware)
 
 @app.get("/metrics")

@@ -13,6 +13,7 @@ from app.observability import (
     REQUEST_COUNT,
     CLASSIFY_SCORE_MAX,
     CLASSIFY_ABSTAIN,
+    UNKNOWN_QUERIES_TOTAL,
 )
 
 router = APIRouter()
@@ -134,6 +135,8 @@ def classify(body: ClassifyRequest) -> ClassifyResponse:
         CLASSIFY_SCORE_MAX.labels(lang).observe(float(best_score))
     if CLASSIFY_ABSTAIN and abstained:
         CLASSIFY_ABSTAIN.labels(lang).inc()
+    if UNKNOWN_QUERIES_TOTAL and abstained:
+        UNKNOWN_QUERIES_TOTAL.labels(lang).inc()
     return ClassifyResponse(
         prediction=prediction,
         alternatives=alts,

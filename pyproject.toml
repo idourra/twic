@@ -20,7 +20,13 @@ dependencies = [
   "python-dotenv>=1.0",
   "orjson>=3.10",
   "rdflib>=6.3"
+  ,"prometheus-client>=0.20"
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["tests", "data", "models", "scripts", "deploy"]
 
 [project.optional-dependencies]
 dev = [
@@ -33,6 +39,9 @@ dev = [
 ]
 embeddings = [
   "sentence-transformers>=3.0"
+]
+search = [
+  "rapidfuzz>=3.0"
 ]
 
 [tool.ruff]

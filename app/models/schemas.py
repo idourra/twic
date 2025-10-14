@@ -34,6 +34,14 @@ class TaxoResult(BaseModel):
 class TaxoSearchResponse(BaseModel):
     results: list[TaxoResult]
 
+class AutocompleteResult(BaseModel):
+    id: str
+    label: str
+    kind: str  # pref | alt
+
+class AutocompleteResponse(BaseModel):
+    results: list[AutocompleteResult]
+
 class TaxoConceptDetail(BaseModel):
     id: str
     uri: str | None = None

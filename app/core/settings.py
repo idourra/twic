@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     api_name: str = "twic"
-    api_version: str = "0.1.0"
+    api_version: str = "0.2.1"
     git_sha: str | None = os.getenv("GIT_SHA")  # inyectado por pipeline de build
     build_date: str | None = os.getenv("BUILD_DATE")  # ISO8601 opcional
 
@@ -41,6 +41,19 @@ class Settings(BaseModel):
     request_rate_limit: int = int(os.getenv("REQUEST_RATE_LIMIT", "100"))  # tokens per window
     rate_limit_window_s: int = int(os.getenv("RATE_LIMIT_WINDOW_S", "60"))
     max_query_chars: int = int(os.getenv("MAX_QUERY_CHARS", "512"))
+
+    # Taxonomy search weights (heuristic ranking) & vector mixing
+    taxo_w_exact: float = float(os.getenv("TAXO_W_EXACT", "100"))
+    taxo_w_prefix: float = float(os.getenv("TAXO_W_PREFIX", "60"))
+    taxo_w_substring: float = float(os.getenv("TAXO_W_SUBSTRING", "40"))
+    taxo_w_alt: float = float(os.getenv("TAXO_W_ALT", "30"))
+    taxo_w_hidden: float = float(os.getenv("TAXO_W_HIDDEN", "20"))
+    taxo_w_path: float = float(os.getenv("TAXO_W_PATH", "10"))
+    taxo_w_context: float = float(os.getenv("TAXO_W_CONTEXT", "5"))  # definition/scope/note/example
+    taxo_w_vec: float = float(os.getenv("TAXO_W_VEC", "0"))  # peso de similitud vectorial (0 = off)
+    taxo_top_k: int = int(os.getenv("TAXO_TOP_K", "25"))
+    taxo_w_fuzzy: float = float(os.getenv("TAXO_W_FUZZY", "0"))  # peso adicional fuzzy ratio
+    taxo_fuzzy_min_ratio: float = float(os.getenv("TAXO_FUZZY_MIN_RATIO", "70"))  # umbral mínimo 0-100
 
     # Feature & infra toggles
     enable_docs: bool = os.getenv("FASTAPI_ENABLE_DOCS", "1") == "1"
