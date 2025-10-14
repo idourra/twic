@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 The format roughly follows Keep a Changelog, with semantic version intent (pre-1.0 may introduce breaking changes).
 
+## [0.3.0] - 2025-10-14
+
+### Added
+
+- Taxonomy fuzzy search con RapidFuzz (partial ratio + peso configurable + umbral mínimo) y fallback cuando no hay coincidencias léxicas.
+- Integración de similitud vectorial en búsqueda de taxonomía con matriz precomputada (prefLabel + altLabel) y peso configurable (`TAXO_W_VEC`).
+- Endpoint de autocompletado `/taxonomy/autocomplete` con índice de prefijos, búsqueda binaria, caché LRU y métricas.
+- Métricas Prometheus específicas de taxonomía: `twic_taxo_search_latency_seconds`, `twic_taxo_search_results_total` (bucketed), `twic_taxo_search_empty_total`, `twic_taxo_embedding_cache_size`.
+- Script offline `scripts/eval_taxonomy_search.py` para (N)DCG con relevancia graduada.
+- Modelos Pydantic para respuestas de autocompletado.
+
+### Changed
+
+- Heurística de ranking revisada: pesos diferenciados para exact, prefix, substring, altLabel, hidden, path depth, context, similitud vectorial y fuzzy ratio.
+- Normalización y preprocesamiento extendidos para queries de taxonomía.
+
+### Fixed
+
+- Conflicto de rutas que provocaba 404 en `/taxonomy/autocomplete` reordenando definición antes de ruta dinámica.
+- Fallback fuzzy asegurando candidatos para typos sin coincidencias léxicas.
+
+### Documentation
+
+- README actualizado (fuzzy, autocomplete, métricas de taxonomía, workflow de evaluación, variables de entorno nuevas).
+
+### Internal
+
+- Bump de versión a 0.3.0 (settings y pyproject).
+
+## Unreleased
+
+- Redis rate limiting distribuido (fallback automático a local).
+- Toggle de documentación pública (`FASTAPI_ENABLE_DOCS`).
+- Métricas HTTP adicionales: `twic_http_429_total`, `twic_http_5xx_total`.
+- Workflows CI/CD: `release.yml` (firma cosign + SBOM) y `deploy.yml` (verificación + smoke test + métricas).
+- Dashboard Grafana versionado (`docs/grafana/dashboard_twic.json`).
+- Firma de imagen Docker (cosign keyless) y generación de SBOM SPDX.
+- Actualización de documentación de observabilidad y README con nuevas capacidades.
+- Integrar distribución completa de probabilidades del clasificador para mejorar estrategias de incertidumbre. (plan)
+- Alerting (p95 latencia, tasa abstención) y dashboards preconfigurados adicionales. (plan)
+- Canary/shadow deployment del próximo modelo calibrado. (plan)
+
 ## [0.1.0] - 2025-10-14
 
 ### Added
@@ -65,16 +107,3 @@ The format roughly follows Keep a Changelog, with semantic version intent (pre-1
 - Preparado para futura integración de `predict_proba` real y detección de drift.
 
 ---
-
-## Unreleased
-
-- Redis rate limiting distribuido (fallback automático a local).
-- Toggle de documentación pública (`FASTAPI_ENABLE_DOCS`).
-- Métricas HTTP adicionales: `twic_http_429_total`, `twic_http_5xx_total`.
-- Workflows CI/CD: `release.yml` (firma cosign + SBOM) y `deploy.yml` (verificación + smoke test + métricas).
-- Dashboard Grafana versionado (`docs/grafana/dashboard_twic.json`).
-- Firma de imagen Docker (cosign keyless) y generación de SBOM SPDX.
-- Actualización de documentación de observabilidad y README con nuevas capacidades.
-- Integrar distribución completa de probabilidades del clasificador para mejorar estrategias de incertidumbre. (plan)
-- Alerting (p95 latencia, tasa abstención) y dashboards preconfigurados adicionales. (plan)
-- Canary/shadow deployment del próximo modelo calibrado. (plan)
