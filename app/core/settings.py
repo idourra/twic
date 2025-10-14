@@ -1,0 +1,49 @@
+from __future__ import annotations
+import os
+from pydantic import BaseModel
+
+class Settings(BaseModel):
+    api_name: str = "twic"
+    api_version: str = "0.1.0"
+    git_sha: str | None = os.getenv("GIT_SHA")  # inyectado por pipeline de build
+    build_date: str | None = os.getenv("BUILD_DATE")  # ISO8601 opcional
+
+    # Pesos de fusión (semántico + BM25 + clasificador)
+    alpha_sem: float = float(os.getenv("ALPHA_SEM", "0.5"))
+    beta_bm25: float = float(os.getenv("BETA_BM25", "0.3"))
+    gamma_clf: float = float(os.getenv("GAMMA_CLF", "0.2"))
+
+    # Umbral y top-k
+    tau_low: float = float(os.getenv("TAU_LOW", "0.4"))
+    top_k: int = int(os.getenv("TOP_K", "20"))
+
+    # Rutas de artefactos
+    models_dir: str = os.getenv("MODELS_DIR", "models")
+    data_dir: str = os.getenv("DATA_DIR", "data")
+
+    # Idiomas
+    default_lang: str = os.getenv("DEFAULT_LANG", "es")
+    supported_langs: list[str] = ["es", "en"]
+
+    # Embeddings
+    embeddings_backend: str = os.getenv("EMBEDDINGS_BACKEND", "placeholder")  # placeholder | st
+    embeddings_model: str = os.getenv(
+        "EMBEDDINGS_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+    )
+
+    # Classifier training defaults (used by retrain script fallback)
+    clf_max_iter: int = int(os.getenv("CLF_MAX_ITER", "300"))
+    clf_calibration: str = os.getenv("CLF_CALIBRATION", "none")  # none|platt|isotonic
+    clf_cv_folds: int = int(os.getenv("CLF_CV_FOLDS", "3"))
+
+    # Observability / limits
+    enable_metrics: bool = os.getenv("ENABLE_METRICS", "1") == "1"
+    request_rate_limit: int = int(os.getenv("REQUEST_RATE_LIMIT", "100"))  # tokens per window
+    rate_limit_window_s: int = int(os.getenv("RATE_LIMIT_WINDOW_S", "60"))
+    max_query_chars: int = int(os.getenv("MAX_QUERY_CHARS", "512"))
+
+    # Feature & infra toggles
+    enable_docs: bool = os.getenv("FASTAPI_ENABLE_DOCS", "1") == "1"
+    redis_url: str | None = os.getenv("REDIS_URL")
+
+settings = Settings()

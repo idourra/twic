@@ -1,0 +1,24 @@
+{
+  "stats": {
+    "n_classes": 282,
+    "classes_with_text": 282,
+    "total_texts": 1728,
+    "avg_texts_per_class": 6.127659574468085,
+    "max_texts_per_class": 8,
+    "min_texts_per_class": 4,
+    "accuracy_val": null,
+    "train_time_s": 16.179032564163208,
+    "vocab_size": 8648
+  },
+  "config": {
+    "lang": "es",
+    "data_dir": "data",
+    "models_dir": "models",
+    "max_examples": 10,
+    "char_ngrams": false,
+    "test_size": 0.1,
+    "dry_run": false,
+    "min_len": 3
+  },
+  "classes_checksum": 1461245874070459237
+}
