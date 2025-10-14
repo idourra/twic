@@ -228,8 +228,12 @@ class TaxonomyStore:
         scores: dict[str, float] = {}
         vec_scores: dict[str, float] = {}
         # pre-candidate: filtrar solo claves que contienen substring normalizada
+        # OR si fuzzy está habilitado y query es corta, usar prefix más relajado
+        min_prefix_len = min(4, len(q_norm)) if settings.taxo_w_fuzzy > 0 else len(q_norm)
         for key, concept_ids in self._inv[lang].items():
-            if q_norm in preprocessing.normalize(key):
+            key_norm = preprocessing.normalize(key)
+            # Substring match or relaxed prefix match (for fuzzy fallback)
+            if q_norm in key_norm or (settings.taxo_w_fuzzy > 0 and key_norm.startswith(q_norm[:min_prefix_len])):
                 for cid in concept_ids:
                     c = self.concepts[cid]
                     pref = c.prefLabel.get(lang) or ""
@@ -262,10 +266,8 @@ class TaxonomyStore:
                             break
                     if any(q_norm in preprocessing.normalize(ex) for ex in c.example.get(lang, [])):
                         base += settings.taxo_w_context
-                    if base <= 0:
-                        continue
-                    prev = scores.get(cid, 0.0)
-                    if base > prev:
+                    # Even if base is 0, keep in candidate set for fuzzy scoring
+                    if cid not in scores or base > scores[cid]:
                         scores[cid] = base
         # Vector similarity (optional)
         if settings.taxo_w_vec > 0 and scores:

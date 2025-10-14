@@ -72,32 +72,6 @@ def search(
             obs.TAXO_EMB_CACHE_SIZE.labels(lang=lang).set(mat.shape[0])
     return TaxoSearchResponse(results=payload)
 
-@router.get("/taxonomy/{concept_id}", response_model=TaxoConceptDetail)
-def get_concept(concept_id: str) -> TaxoConceptDetail:
-    store = _get_store()
-    c = store.concepts.get(concept_id)
-    if not c:
-        raise HTTPException(status_code=404, detail="concept not found")
-    # Convert dataclass Concept to dict matching schema (aliases applied automatically)
-    data = {
-        "id": c.id,
-        "uri": c.uri,
-        "prefLabel": c.prefLabel,
-        "altLabel": c.altLabel,
-        "hiddenLabel": c.hiddenLabel,
-        "definition": c.definition,
-        "scopeNote": c.scopeNote,
-        "note": c.note,
-        "example": c.example,
-        "path": c.path,
-        "broader": c.broader,
-        "narrower": c.narrower,
-        "exactMatch": c.exactMatch,
-        "closeMatch": c.closeMatch,
-        "related": c.related,
-    }
-    return TaxoConceptDetail(**data)
-
 @router.get("/taxonomy/autocomplete", response_model=AutocompleteResponse)
 def autocomplete(
     q: str,
@@ -128,3 +102,29 @@ def autocomplete(
     if obs.TAXO_SEARCH_EMPTY and not results:
         obs.TAXO_SEARCH_EMPTY.labels(lang=lang, source="autocomplete").inc()
     return AutocompleteResponse(results=results)
+
+@router.get("/taxonomy/{concept_id}", response_model=TaxoConceptDetail)
+def get_concept(concept_id: str) -> TaxoConceptDetail:
+    store = _get_store()
+    c = store.concepts.get(concept_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="concept not found")
+    # Convert dataclass Concept to dict matching schema (aliases applied automatically)
+    data = {
+        "id": c.id,
+        "uri": c.uri,
+        "prefLabel": c.prefLabel,
+        "altLabel": c.altLabel,
+        "hiddenLabel": c.hiddenLabel,
+        "definition": c.definition,
+        "scopeNote": c.scopeNote,
+        "note": c.note,
+        "example": c.example,
+        "path": c.path,
+        "broader": c.broader,
+        "narrower": c.narrower,
+        "exactMatch": c.exactMatch,
+        "closeMatch": c.closeMatch,
+        "related": c.related,
+    }
+    return TaxoConceptDetail(**data)
