@@ -37,8 +37,37 @@ The format roughly follows Keep a Changelog, with semantic version intent (pre-1
 
 ---
 
+## [0.2.0] - 2025-10-14
+
+### Added (0.2.0)
+
+- Real-time observability docs (`docs/observability.md`) y sección Operación en README.
+- Métricas Prometheus adicionales: `twic_classify_score_max{lang}`, `twic_abstentions_total{lang}`.
+- Endpoint `/health` enriquecido con artefactos presentes, número de clases y dimensión de embeddings.
+- Scripts de ciclo de vida de datos:
+  - `feedback_consolidate.py` (consolidación y estadísticas de feedback diario).
+  - `select_uncertain.py` (active learning: margin / entropy).
+- Módulo `app/observability.py` para centralizar métricas (evita imports circulares).
+
+### Changed (0.2.0)
+
+- `classify` ahora registra abstenciones y distribuye score máximo a histogram (cuando métricas activas).
+- TESTS: relajado test de metadata para compatibilidad con artefactos legacy.
+
+### Fixed (0.2.0)
+
+- Eliminado circular import entre `classify` y `main` moviendo métricas a módulo dedicado.
+- Lint issues menores en nuevos scripts (imports y longitud líneas).
+
+### Notes
+
+- Esta versión formaliza el pipeline de feedback y sienta bases de active learning.
+- Preparado para futura integración de `predict_proba` real y detección de drift.
+
+---
+
 ## Unreleased
 
-- Embeddings migration to real model (sentence-transformers) pending.
-- Advanced metrics & monitoring.
-- Production deployment hardening and rate limiting.
+- Integrar distribución completa de probabilidades del clasificador para mejorar estrategias de incertidumbre.
+- Alerting (p95 latencia, tasa abstención) y dashboards preconfigurados.
+- Canary/shadow deployment del próximo modelo calibrado.
