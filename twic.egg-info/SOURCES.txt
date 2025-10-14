@@ -20,7 +20,10 @@ tests/test_api_endpoints.py
 tests/test_embeddings_placeholder.py
 tests/test_health_metrics.py
 tests/test_metadata_fields.py
+tests/test_taxonomy_autocomplete.py
 tests/test_taxonomy_detail.py
+tests/test_taxonomy_fuzzy.py
+tests/test_taxonomy_search_ranking.py
 tests/test_taxonomy_store.py
 twic.egg-info/PKG-INFO
 twic.egg-info/SOURCES.txt
