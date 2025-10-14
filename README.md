@@ -102,6 +102,17 @@ Ejemplo:
 curl -s 'http://localhost:8000/taxonomy/search?q=chocolates&lang=es&limit=5' | jq .
 ```
 
+Respuesta ejemplo:
+
+```json
+{
+  "results": [
+    {"id": "111007", "label": "Chocolates y bombones", "path": ["Alimentos","Dulces, confitería, galletas, aperitivos  y panes","Chocolates y bombones"]},
+    {"id": "111002", "label": "Dulces y pasteles", "path": ["Alimentos","Dulces, confitería, galletas, aperitivos  y panes","Dulces y pasteles"]}
+  ]
+}
+```
+
 Para habilitar señal vectorial (si embeddings reales están activos):
 
 ```bash
@@ -116,6 +127,8 @@ Nuevos pesos y variables relevantes:
 | `TAXO_W_FUZZY` | Peso adicional fuzzy ratio | 0 |
 | `TAXO_FUZZY_MIN_RATIO` | Ratio mínimo (0-100) para sumar fuzzy | 70 |
 | `TAXO_TOP_K` | Máximo de resultados por defecto | 25 |
+
+Nota: El gauge `twic_taxo_embeddings_cache_size` sólo se expone cuando `TAXO_W_VEC>0` y se han precomputado embeddings (pref + alt) al cargar la taxonomía.
 
 Recomendación: ajustar pesos tras observar métricas de CTR, feedback y NDCG offline.
 
@@ -249,7 +262,7 @@ Una vez levantado: <http://localhost:8000/docs> (controlado por `FASTAPI_ENABLE_
 ```jsonc
 {
   "status": "ok",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "git_sha": "<commit>",
   "build_date": "2025-10-14T12:34:56Z", // si se inyecta BUILD_DATE
   "python_version": "3.11.9",

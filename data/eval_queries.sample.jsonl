@@ -1,0 +1,4 @@
+{"query": "chocolates", "relevant": ["111007"], "graded": {"111007": 3}}
+{"query": "vino tinto", "relevant": ["240103"], "graded": {"240103": 3}}
+{"query": "aceite de oliva", "relevant": ["110701"], "graded": {"110701": 3}}
+{"query": "jamon iberico", "relevant": ["110201"], "graded": {"110201": 3}}
