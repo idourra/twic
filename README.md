@@ -51,7 +51,11 @@ Incluye:
 - Rate limiting local en memoria o distribuido via Redis (`REDIS_URL`).
 - Toggle de documentación: `FASTAPI_ENABLE_DOCS=0` para ocultar `/docs` y `/openapi.json` en producción.
 - Endpoint `/metrics` (Prometheus) activable vía `ENABLE_METRICS=1`.
-- Métricas: `twic_requests_total`, `twic_request_latency_seconds`, `twic_classify_score_max`, `twic_abstentions_total`, `twic_http_429_total`, `twic_http_5xx_total`.
+- Métricas: `twic_requests_total`, `twic_request_latency_seconds`, `twic_classify_score_max`, `twic_abstentions_total`, `twic_http_429_total`, `twic_http_5xx_total`, `twic_feedback_total{type}`, `twic_unknown_queries_total{lang}`, `twic_model_version_info{version,git_sha}`.
+  - `twic_feedback_total{type}`: tipos: `correction` (sistema abstiene y usuario aporta), `override` (usuario reemplaza predicción), `confirm` (usuario confirma), `generic` (otros casos).
+  - `twic_unknown_queries_total{lang}`: consultas con abstención (proxy de intents desconocidos / gap de cobertura).
+  - `twic_model_version_info{version,git_sha}`: gauge estático (=1) etiquetado para correlacionar métricas con despliegues.
+  - Cobertura aproximada = 1 - rate(twic_abstentions_total{lang}) / rate(twic_requests_total{path="/classify",status=~"200.*"}).
 - Dashboard Grafana JSON en `docs/grafana/dashboard_twic.json`.
 - Imagen Docker firmada (cosign keyless) + SBOM (workflow release).
 
@@ -72,6 +76,117 @@ Scrape config Prometheus mínima:
 ```
 
 SLO sugerido inicial: p95 latencia < 150 ms, tasa de abstención < 10%, 429 rate bajo (<2% de requests), 5xx < 0.5%.
+
+### Búsqueda de taxonomía (ranking actual)
+
+El endpoint `/taxonomy/search` ahora aplica:
+
+1. Normalización extendida (Unicode NFKC, lowercase, remover acentos, colapsar no alfanum, singularización naïve de plurales simples).
+2. Scoring heurístico por concepto usando pesos configurables vía variables de entorno:
+  - `TAXO_W_EXACT` (default 100): match exacto de `prefLabel`.
+  - `TAXO_W_PREFIX` (60): `prefLabel` inicia con la query.
+  - `TAXO_W_SUBSTRING` (40): substring en `prefLabel`.
+  - `TAXO_W_ALT` (30): coincidence en `altLabel`.
+  - `TAXO_W_HIDDEN` (20): `hiddenLabel`.
+  - `TAXO_W_PATH` (10): cualquier segmento de la ruta jerárquica.
+  - `TAXO_W_CONTEXT` (5): definición / scope / note / example.
+  - `TAXO_W_VEC` (0): peso de similitud vectorial (si >0 calcula embeddings de `prefLabel`).
+3. Fuzzy matching opcional (RapidFuzz `partial_ratio`) ponderado por `TAXO_W_FUZZY` si >0 y mínimo ratio `TAXO_FUZZY_MIN_RATIO` (default 70). Aumenta el score proporcionalmente al ratio (ratio/100 * peso).
+4. Combinación opcional con similitud vectorial coseno (normalizada a [0,1]) si `TAXO_W_VEC>0` (usa embeddings precomputados de `prefLabel` y `altLabel`).
+5. Orden final por score descendente y, en caso de empate, por longitud (más corta primero).
+6. Límite de resultados controlado por `limit` (query param) o `TAXO_TOP_K` (default 25).
+
+Ejemplo:
+
+```bash
+curl -s 'http://localhost:8000/taxonomy/search?q=chocolates&lang=es&limit=5' | jq .
+```
+
+Para habilitar señal vectorial (si embeddings reales están activos):
+
+```bash
+export TAXO_W_VEC=15
+uvicorn app.main:app
+```
+
+Nuevos pesos y variables relevantes:
+
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| `TAXO_W_FUZZY` | Peso adicional fuzzy ratio | 0 |
+| `TAXO_FUZZY_MIN_RATIO` | Ratio mínimo (0-100) para sumar fuzzy | 70 |
+| `TAXO_TOP_K` | Máximo de resultados por defecto | 25 |
+
+Recomendación: ajustar pesos tras observar métricas de CTR, feedback y NDCG offline.
+
+#### Autocomplete
+
+Endpoint: `/taxonomy/autocomplete?q=<prefijo>&lang=es&limit=15`
+
+Características:
+
+- Índice precomputado de `prefLabel` y `altLabel` normalizados.
+- Búsqueda por prefix (binary search) + orden: `prefLabel` primero, luego `altLabel`, priorizando longitudes más cortas.
+- Cache LRU en memoria (tamaño 256) por `(lang, query_norm, limit)`.
+- Métricas etiquetadas `source="autocomplete"`.
+
+Ejemplo:
+
+```bash
+curl -s 'http://localhost:8000/taxonomy/autocomplete?q=choc&lang=es&limit=5' | jq .
+```
+
+Respuesta:
+
+```json
+{
+  "results": [
+    {"id": "111007", "label": "Chocolates y bombones", "kind": "pref"},
+    {"id": "111007", "label": "Bombones", "kind": "alt"}
+  ]
+}
+```
+
+#### Métricas específicas de búsqueda/Autocomplete
+
+Se añaden (todas con cardinalidad controlada):
+
+| Métrica | Tipo | Labels | Descripción |
+|---------|------|--------|-------------|
+| `twic_taxo_search_latency_seconds` | Histogram | `lang`, `source` | Latencia de búsqueda/autocomplete |
+| `twic_taxo_search_results_total` | Counter | `lang`, `source`, `bucket` | Distribución de tamaños (buckets: 0,1_5,6_10,gt_10) |
+| `twic_taxo_search_empty_total` | Counter | `lang`, `source` | Búsquedas sin resultados |
+| `twic_taxo_embeddings_cache_size` | Gauge | `lang` | Nº de embeddings precomputados (pref+alt) |
+
+Ejemplos PromQL:
+
+```promql
+# p95 latencia búsqueda (últimos 5m)
+histogram_quantile(0.95, sum by (le) (rate(twic_taxo_search_latency_seconds_bucket{source="search"}[5m])))
+
+# Tasa de vacíos autocomplete vs búsqueda (1h)
+sum(rate(twic_taxo_search_empty_total{source="autocomplete"}[1h])) / sum(rate(twic_taxo_search_results_total{source="autocomplete",bucket!="0"}[1h]))
+```
+
+#### Evaluación offline (NDCG)
+
+Script: `scripts/eval_taxonomy_search.py`
+
+Formato JSONL entrada (una línea por query):
+
+```json
+{"query": "chocolates", "lang": "es", "relevant": ["111007"]}
+{"query": "gaseosa cola", "relevant": ["110501"]}
+{"query": "bombons", "graded": {"111007": 3, "111099": 1}}
+```
+
+Ejecución:
+
+```bash
+python scripts/eval_taxonomy_search.py --input data/eval_queries.jsonl --k 5 10 --limit 25 > ndcg_out.jsonl
+```
+
+Salida mezcla líneas por query + bloque agregado final (`mean@K`, `median@K`, `coverage@K`). Usar para comparar ajustes de pesos (`TAXO_W_*`) y thresholds fuzzy.
 
 ## Docker
 
@@ -119,6 +234,9 @@ uvicorn app.main:app --reload --port 8000
 | ENABLE_METRICS | Exponer /metrics | 1 |
 | REQUEST_RATE_LIMIT | Tokens por ventana para rate limiting local/distribuido | 100 |
 | RATE_LIMIT_WINDOW_S | Ventana (s) para rate limiting | 60 |
+| TAXO_W_FUZZY | Peso fuzzy ratio | 0 |
+| TAXO_FUZZY_MIN_RATIO | Mínimo ratio fuzzy | 70 |
+| TAXO_TOP_K | Top-K por defecto taxonomía | 25 |
 
 ### Health y OpenAPI
 
@@ -131,7 +249,7 @@ Una vez levantado: <http://localhost:8000/docs> (controlado por `FASTAPI_ENABLE_
 ```jsonc
 {
   "status": "ok",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "git_sha": "<commit>",
   "build_date": "2025-10-14T12:34:56Z", // si se inyecta BUILD_DATE
   "python_version": "3.11.9",
@@ -274,6 +392,22 @@ pip freeze --exclude-editable > requirements.lock
 
 Alternativa futura: uso de `pip-tools` (`pip-compile`) para resolución determinista.
 
+### Consultas Prometheus útiles (business KPIs)
+
+```promql
+# Cobertura (1 - tasa abstención) por idioma (window 1h)
+1 - (sum by (lang) (rate(twic_abstentions_total[1h])) / sum by (lang) (rate(twic_requests_total{path="/classify",status=~"200.*"}[1h])))
+
+# Feedback por tipo (últimas 24h)
+sum by (type) (increase(twic_feedback_total[24h]))
+
+# Unknown queries ratio (abstenciones / requests) 24h
+sum(rate(twic_unknown_queries_total[24h])) / sum(rate(twic_requests_total{path="/classify",status=~"200.*"}[24h]))
+
+# Despliegues recientes (gauge etiquetado)
+twic_model_version_info
+```
+
 
 ## Contribuir
 
@@ -282,6 +416,6 @@ Lee `CONTRIBUTING.md` y abre un PR.
 ## Documentación adicional
 
 - **Contrato / SOW del MVP:** ver `docs/CONTRATO_SOW.md` para objetivo, alcance, KPIs y criterios de aceptación.
-- **Changelog:** ver `CHANGELOG.md` para historial de versiones (actual 0.2.0).
+- **Changelog:** ver `CHANGELOG.md` para historial de versiones (actual 0.2.1).
 - **Runbooks:** `docs/runbooks/*.md` para respuesta a alertas (latencia, 5xx, abstención, score bajo, 429).
 
