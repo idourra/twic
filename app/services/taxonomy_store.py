@@ -268,6 +268,15 @@ class TaxonomyStore:
                     if base > prev:
                         scores[cid] = base
         # Vector similarity (optional)
+        # Fuzzy fallback if no base matches but fuzzy enabled
+        if not scores and settings.taxo_w_fuzzy > 0 and fuzz:
+            # Evaluate fuzzy over all prefLabels (could be optimized)
+            for cid, c in self.concepts.items():
+                pref = c.prefLabel.get(lang) or next(iter(c.prefLabel.values()), "")
+                pref_norm = preprocessing.normalize(pref)
+                ratio = fuzz.partial_ratio(q_norm, pref_norm)
+                if ratio >= settings.taxo_fuzzy_min_ratio:
+                    scores[cid] = (ratio / 100.0) * settings.taxo_w_fuzzy
         if settings.taxo_w_vec > 0 and scores:
             # Use precomputed matrix if available; fallback to per-concept embedding
             q_emb = embed_text(raw_q)
