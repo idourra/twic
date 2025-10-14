@@ -1,0 +1,4 @@
+# CODEOWNERS define revisores obligatorios para protecciones de rama.
+# Sintaxis: patrón  propietarios (usuarios u org/teams)
+
+* @idourra

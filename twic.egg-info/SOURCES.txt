@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+app/main.py
+twic.egg-info/PKG-INFO
+twic.egg-info/SOURCES.txt
+twic.egg-info/dependency_links.txt
+twic.egg-info/requires.txt
+twic.egg-info/top_level.txt
