@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  api:
+    build: .
+    container_name: twic-api
+    ports:
+      - "8000:8000"
+    environment:
+      MODELS_DIR: models
+      DATA_DIR: data
+      DEFAULT_LANG: es
+    volumes:
+      - ./data:/app/data:rw
+    restart: unless-stopped

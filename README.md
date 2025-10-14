@@ -29,6 +29,49 @@ scripts/        # Utilidades (importar SKOS, entrenar, embeddings)
 - Integrar importación real de SKOS en pipeline.
 - Añadir CHANGELOG y versionado semántico automatizado.
 
+## Docker
+
+### Build
+
+```bash
+docker build -t twic:latest .
+```
+
+### Run simple
+
+```bash
+docker run --rm -p 8000:8000 twic:latest
+```
+
+### docker-compose
+
+```bash
+docker compose up --build
+```
+
+Esto monta `./data` como volumen para poder regenerar embeddings sin reconstruir la imagen.
+
+### Desarrollo (hot reload)
+
+Para desarrollo puedes usar uvicorn directamente:
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+### Variables de entorno relevantes
+
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| MODELS_DIR | Carpeta de modelos | models |
+| DATA_DIR | Carpeta de datos (taxonomy, embeddings) | data |
+| DEFAULT_LANG | Idioma por defecto | es |
+
+### Health y OpenAPI
+
+Una vez levantado: <http://localhost:8000/docs> (deshabilitar en prod si se requiere).
+
+
 ## Contribuir
 
 Lee `CONTRIBUTING.md` y abre un PR.
