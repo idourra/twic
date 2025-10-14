@@ -5,6 +5,7 @@ from pydantic import BaseModel
 class Settings(BaseModel):
     api_name: str = "twic"
     api_version: str = "0.1.0"
+    git_sha: str | None = os.getenv("GIT_SHA")  # inyectado por pipeline de build
 
     # Pesos de fusión (semántico + BM25 + clasificador)
     alpha_sem: float = float(os.getenv("ALPHA_SEM", "0.5"))

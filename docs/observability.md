@@ -142,3 +142,22 @@ El workflow de release firma la imagen Docker con **cosign (keyless)** y genera 
 
 ---
 Última actualización: 2025-10-14 (redis + firma + métricas HTTP).
+
+## Alerting (Prometheus)
+
+Archivo de reglas sugeridas: `deploy/alerts/prometheus-rules.yml`.
+
+Alertas incluidas:
+
+- Latencia p95 > 150ms 5m (`TwicHighLatencyP95`).
+- Abstention rate > 10% 10m (`TwicHighAbstentionRate`).
+- Tasa absoluta 5xx > 0.05/s 5m (`TwicHighError5xx`).
+- Ratio 429 > 2% 10m (`TwicHighRateLimit429`).
+- Mean score < 0.55 15m (`TwicLowMeanScore`).
+
+Recomendaciones:
+
+1. Ajustar umbrales tras observar línea base en producción.
+2. Añadir rutas de silencio / mantenimiento programado en Alertmanager.
+3. Correlacionar `TwicLowMeanScore` con drift de distribución de clases y métricas offline.
+4. Añadir anotaciones con enlaces a runbooks (futuros `docs/runbooks/*.md`).

@@ -1,0 +1,48 @@
+groups:
+  - name: twic-service-alerts
+    interval: 30s
+    rules:
+      - alert: TwicHighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(twic_request_latency_seconds_bucket[5m])) by (le)) > 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia p95 elevada"
+          description: "La latencia p95 supera 150ms por más de 5m."
+
+      - alert: TwicHighAbstentionRate
+        expr: (sum(rate(twic_abstentions_total[5m])) / sum(rate(twic_requests_total{path="/classify"}[5m]))) > 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tasa de abstención alta"
+          description: "Abstention rate > 10% en 10m ventana."
+
+      - alert: TwicHighError5xx
+        expr: (rate(twic_http_5xx_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Errores 5xx elevados"
+          description: "Tasa absoluta de 5xx >0.05/s sostenida 5m. Revisar logs."
+
+      - alert: TwicHighRateLimit429
+        expr: (rate(twic_http_429_total[5m]) / sum(rate(twic_requests_total[5m]))) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Excesivos 429"
+          description: "Más del 2% de respuestas son 429 (posible agresión o sub-provisionamiento)."
+
+      - alert: TwicLowMeanScore
+        expr: (sum(rate(twic_classify_score_max_sum[10m])) / sum(rate(twic_classify_score_max_count[10m]))) < 0.55
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Mean score degradado"
+          description: "La media de score máximo <0.55 podría indicar drift o cambio de distribución."
