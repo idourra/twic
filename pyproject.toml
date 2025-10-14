@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twic"
-version = "0.3.0"
+version = "0.3.1"
 description = "MVP de clasificación de intenciones de búsqueda"
 requires-python = ">=3.11"
 dependencies = [

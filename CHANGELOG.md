@@ -4,7 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format roughly follows Keep a Changelog, with semantic version intent (pre-1.0 may introduce breaking changes).
 
+## [0.3.1] - 2025-10-14
+
+### Added
+
+- Archivo `.env.example` con variables clave y comentarios.
+- Script `scripts/smoke.sh` para smoke test automatizado (health, ready, classify, taxonomy search/autocomplete, metrics).
+- Sección README "MVP Deploy" con pasos rápidos (env, build/run, smoke, observabilidad, checklist).
+
+### Changed
+
+- Versión bump a 0.3.1 (MVP formal) en `pyproject.toml` y `settings`.
+
+### Fixed
+
+- Gauge `twic_taxo_embeddings_cache_size` ahora se expone también cuando `TAXO_W_VEC=0` (valor 0) evitando flakiness en tests y facilitando monitoreo consistente.
+
+### Notes
+
+- Marca el corte de MVP operativo: clasificación híbrida, búsqueda taxonomía (heurística + fuzzy + vector opcional), autocomplete, métricas, readiness, smoke test y supply chain (firma + SBOM) listos.
+
 ## [0.3.0] - 2025-10-14
+
 
 ### Added
 

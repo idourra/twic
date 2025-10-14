@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     api_name: str = "twic"
-    api_version: str = "0.3.0"
+    api_version: str = "0.3.1"
     git_sha: str | None = os.getenv("GIT_SHA")  # inyectado por pipeline de build
     build_date: str | None = os.getenv("BUILD_DATE")  # ISO8601 opcional
 
