@@ -7,12 +7,62 @@ from typing import Any
 
 import numpy as np
 
-EMBED_DIM = 768
+class _EmbedRuntime:
+    def __init__(self) -> None:
+        self.backend = os.getenv("EMBEDDINGS_BACKEND", "placeholder")
+        self.model_name = os.getenv(
+            "EMBEDDINGS_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+        )
+        self.model = None
+        self.dim: int | None = None
 
-def text_embed(s: str) -> np.ndarray:
-    """Deterministic pseudo embedding (placeholder)."""
+    def ensure(self) -> None:  # pragma: no cover - heavy import
+        if self.backend != "st" or self.model is not None:
+            return
+        try:
+            from sentence_transformers import SentenceTransformer  # type: ignore
+        except ImportError as e:
+            print(
+                f"[build_embeddings] sentence-transformers import failed ({e}); "
+                "fallback placeholder"
+            )
+            self.backend = "placeholder"
+            return
+        try:
+            self.model = SentenceTransformer(self.model_name)
+            test_vec = self.model.encode(["_probe_"], normalize_embeddings=True)
+            self.dim = int(test_vec.shape[1])
+            print(
+                f"[build_embeddings] loaded '{self.model_name}' dim={self.dim}"
+            )
+        except (OSError, RuntimeError, ValueError) as e:
+            print(f"[build_embeddings] failed to load model ({e}); fallback placeholder")
+            self.backend = "placeholder"
+            self.model = None
+            self.dim = None
+
+
+_RUNTIME = _EmbedRuntime()
+
+
+def _placeholder_embed(s: str, dim: int = 768) -> np.ndarray:
     rng = np.random.default_rng(abs(hash(s)) % 2**32)
-    return rng.normal(size=(EMBED_DIM,), loc=0.0, scale=1.0).astype(np.float32)
+    vec = rng.normal(size=(dim,), loc=0.0, scale=1.0).astype(np.float32)
+    return vec
+
+
+def embed_texts(texts: list[str]) -> np.ndarray:
+    if _RUNTIME.backend == "st":
+        _RUNTIME.ensure()
+        if _RUNTIME.model is not None:
+            arr = _RUNTIME.model.encode(texts, normalize_embeddings=True)
+            return arr.astype(np.float32)
+    dim = _RUNTIME.dim or 768
+    return (
+        np.vstack([_placeholder_embed(t, dim) for t in texts])
+        if texts
+        else np.zeros((0, dim), dtype=np.float32)
+    )
 
 def _as_text(value: Any, lang: str) -> str:
     if value is None:
@@ -57,24 +107,22 @@ def build_for_lang(lang: str) -> None:
         txt = " | ".join([p for p in pieces if p]).strip()
         ids.append(str(row.get("id")))
         texts.append(txt)
-    dim = int(os.getenv("EMBED_DIM", str(EMBED_DIM)))
-    if dim != EMBED_DIM:
-        # Simple resize by trunc/pad
-        embs_base = [text_embed(t) for t in texts]
-        embs_adj = []
-        for e in embs_base:
-            if dim < EMBED_DIM:
-                embs_adj.append(e[:dim])
-            else:
-                pad = np.zeros((dim-EMBED_DIM,), dtype=np.float32)
-                embs_adj.append(np.concatenate([e, pad]))
-        embs = np.vstack(embs_adj) if embs_adj else np.zeros((0,dim), dtype=np.float32)
+    # Embedding dimension determined by backend; optional override via EMBED_DIM for placeholder
+    if _RUNTIME.backend == "placeholder":
+        dim = int(os.getenv("EMBED_DIM", "768"))
+        embs = embed_texts(texts)
+        # If user changed EMBED_DIM but placeholder default is 768, resize accordingly
+        if dim != embs.shape[1]:
+            adjusted = []
+            for e in embs:
+                if dim < embs.shape[1]:
+                    adjusted.append(e[:dim])
+                else:
+                    pad = np.zeros((dim - embs.shape[1],), dtype=np.float32)
+                    adjusted.append(np.concatenate([e, pad]))
+            embs = np.vstack(adjusted) if adjusted else np.zeros((0, dim), dtype=np.float32)
     else:
-        embs = (
-            np.vstack([text_embed(t) for t in texts])
-            if texts
-            else np.zeros((0, EMBED_DIM), dtype=np.float32)
-        )
+        embs = embed_texts(texts)
     Path("data").mkdir(exist_ok=True)
     np.save(f"data/class_embeddings_{lang}.npy", embs)
     np.save("data/class_ids.npy", np.array(ids, dtype=object))
