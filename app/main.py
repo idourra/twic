@@ -8,7 +8,9 @@ import os
 import joblib
 import hashlib
 from app.core.settings import settings
-from app.routers import taxonomy, feedback, classify, admin
+from app.routers import taxonomy, feedback, classify, admin, ready
+from app.services.taxonomy_store import TaxonomyStore
+from app.services import classifier as _clf, retrieval as _retrieval, retrieval_bm25 as _bm25
 from app import observability
 
 # Metrics (Prometheus) optional
@@ -192,3 +194,41 @@ app.include_router(taxonomy.router)
 app.include_router(feedback.router)
 app.include_router(classify.router)
 app.include_router(admin.router)
+app.include_router(ready.router)
+
+# --- Startup preload (taxonomy + model artifacts) ---
+@app.on_event("startup")
+def _startup_preload():  # pragma: no cover (integration)
+    try:
+        # Preload taxonomy store
+        store = TaxonomyStore(f"{settings.data_dir}/taxonomy.json")
+        store.load()
+        from app.routers.ready import mark_ready
+        mark_ready(taxonomy=True)
+        # Preload classifier artifacts and retrieval indices for default language
+        default_lang = settings.default_lang
+        # Dense retrieval indices
+        try:
+            _retrieval.load_index(
+                f"{settings.data_dir}/class_embeddings_{default_lang}.npy",
+                f"{settings.data_dir}/class_ids.npy",
+            )
+            mark_ready(classifier=True)  # classifier loaded below but retrieval index ok
+        except Exception:
+            pass
+        # Classifier
+        try:
+            _clf.load(settings.models_dir)
+            mark_ready(classifier=True)
+        except Exception:
+            pass
+        # BM25 index
+        try:
+            _bm25.build_or_get(default_lang, taxonomy_path=f"{settings.data_dir}/taxonomy.json")
+            mark_ready(bm25=True)
+        except Exception:
+            pass
+        print("{\"event\":\"startup_preload_ok\"}")
+    except Exception as e:  # noqa: BLE001
+        print(json.dumps({"event": "startup_preload_error", "error": str(e)}))
+
