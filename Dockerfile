@@ -11,8 +11,8 @@ WORKDIR /app
 
 # System deps (build essentials if needed for faiss / numpy wheels)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-  && rm -rf /var/lib/apt/lists/*
+        build-essential \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY pyproject.toml ./
 COPY app ./app
@@ -39,6 +39,11 @@ COPY data ./data
 COPY models ./models
 COPY scripts ./scripts
 COPY pyproject.toml ./
+
+# Create non-root user
+RUN addgroup --system twic && adduser --system --ingroup twic twic \
+    && chown -R twic:twic /app
+USER twic
 
 EXPOSE 8000
 

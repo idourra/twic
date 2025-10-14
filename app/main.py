@@ -51,6 +51,8 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):  # pragma: no cover (integrat
             if len(body_bytes) > settings.max_query_chars * 4:  # approximate safety margin
                 return PlainTextResponse("payload too large", status_code=413)
         if not _rate_limiter.allow():
+            if observability.HTTP_429_COUNT:
+                observability.HTTP_429_COUNT.inc()
             return PlainTextResponse("rate limit exceeded", status_code=429)
         response = None
         status_code = 500
@@ -64,6 +66,8 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):  # pragma: no cover (integrat
                 REQUEST_LATENCY.labels(request.method, request.url.path).observe(dur)
             if REQUEST_COUNT:
                 REQUEST_COUNT.labels(request.method, request.url.path, str(status_code)).inc()
+            if 500 <= status_code <= 599 and observability.HTTP_5XX_COUNT:
+                observability.HTTP_5XX_COUNT.inc()
             # Structured log line
             log_line = json.dumps({
                 "event": "http_access",

@@ -11,6 +11,8 @@ REQUEST_LATENCY = None
 REQUEST_COUNT = None
 CLASSIFY_SCORE_MAX = None
 CLASSIFY_ABSTAIN = None
+HTTP_429_COUNT = None
+HTTP_5XX_COUNT = None
 
 if settings.enable_metrics and Counter and Histogram:  # pragma: no cover - simple wiring
     REQUEST_LATENCY = Histogram(
@@ -29,4 +31,14 @@ if settings.enable_metrics and Counter and Histogram:  # pragma: no cover - simp
         "twic_abstentions_total",
         "Abstentions by language",
         ["lang"]
+    )
+    HTTP_429_COUNT = Counter(
+        "twic_http_429_total",
+        "Total 429 (rate limit exceeded) responses",
+        []
+    )
+    HTTP_5XX_COUNT = Counter(
+        "twic_http_5xx_total",
+        "Total 5xx responses",
+        []
     )
