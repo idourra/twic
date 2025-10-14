@@ -421,6 +421,89 @@ sum(rate(twic_unknown_queries_total[24h])) / sum(rate(twic_requests_total{path="
 twic_model_version_info
 ```
 
+## MVP Deploy (rápido)
+
+Esta sección resume los pasos mínimos para levantar el servicio en un entorno (dev/prod) y validar funcionalidad básica.
+
+### 1. Preparar variables de entorno
+
+Copiar `.env.example` a `.env` y ajustar sólo si es necesario (por MVP dejar valores por defecto salvo `GIT_SHA` / `BUILD_DATE` si se desea observabilidad de despliegue).
+
+```bash
+cp .env.example .env
+export GIT_SHA=$(git rev-parse --short HEAD)
+export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+```
+
+### 2. Ejecutar (local)
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Con Docker:
+
+```bash
+docker build -t twic:local .
+docker run --rm -p 8000:8000 --env-file .env -e GIT_SHA -e BUILD_DATE twic:local
+```
+
+### 3. Probar readiness y health
+
+```bash
+curl -s localhost:8000/health | jq .
+curl -s localhost:8000/ready  | jq .
+```
+
+Distinción:
+
+- `/health`: chequeo ligero de vida + metadata (si el proceso responde, devuelve OK; útil para liveness).
+- `/ready`: sólo `status="ready"` cuando taxonomía, modelos y bm25 están precargados (útil para readiness en orquestadores). En estado inicial puede devolver `503` o un JSON sin `ready=true` hasta completar precarga.
+
+### 4. Smoke test automático
+
+Incluimos `scripts/smoke.sh` que valida endpoints esenciales.
+
+```bash
+bash scripts/smoke.sh
+```
+
+Salida esperada (resumen):
+
+```
+[smoke] OK  - health
+[smoke] OK  - ready
+[smoke] OK  - classify
+[smoke] OK  - taxo_search
+[smoke] OK  - taxo_auto
+[smoke] OK  - metrics
+[smoke] SMOKE PASSED
+```
+
+### 5. Observabilidad básica
+
+Metrics scrape: visitar `http://localhost:8000/metrics` (si `ENABLE_METRICS=1`).
+
+### 6. Checklist MVP
+
+- Clasificación responde (`/classify`).
+- Búsqueda y autocomplete responden (`/taxonomy/search`, `/taxonomy/autocomplete`).
+- Readiness ok (`/ready`).
+- Métricas expuestas.
+- Variables de entorno controladas por `.env`.
+
+Si todo lo anterior pasa, el sistema se considera MVP operativo.
+
+### 7. Próximos incrementos (post-MVP)
+
+- Autenticación / API Key.
+- Alertas Prometheus (latencia, 5xx, abstención, vacío taxonomía).
+- Tracing distribuido (OTel).
+- Limpieza Pydantic v2 (ConfigDict) y deprecations FastAPI on_event → lifespan.
+- Testing de carga y perfil de memoria.
+- Endpoints de gestión de feedback (moderación / export) y autenticación.
+
+
 
 ## Contribuir
 

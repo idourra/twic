@@ -152,7 +152,7 @@ class TaxonomyStore:
             self._emb_dim = dim
             for l in langs:
                 rows: list[np.ndarray] = []
-                meta: list[tuple[str,str,str]] = []
+                meta: list[tuple[str, str, str]] = []
                 for c in self.concepts.values():
                     # prefLabel first (used for concept-level score)
                     pref_text = c.prefLabel.get(l) or next(iter(c.prefLabel.values()), "")
@@ -181,6 +181,14 @@ class TaxonomyStore:
                         obs.TAXO_EMB_CACHE_SIZE.labels(lang=l).set(mat.shape[0])
                     except Exception:  # pragma: no cover - protección defensiva
                         pass
+        else:
+            # Aun cuando no se usa similitud vectorial, exponer gauge en 0 por idioma presente
+            if obs.TAXO_EMB_CACHE_SIZE:
+                try:
+                    for l in langs:
+                        obs.TAXO_EMB_CACHE_SIZE.labels(lang=l).set(0)
+                except Exception:  # pragma: no cover
+                    pass
         # Build autocomplete indices
         self._ac_labels.clear()
         self._ac_norms.clear()
